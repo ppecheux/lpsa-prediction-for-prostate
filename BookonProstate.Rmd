@@ -1,0 +1,168 @@
+---
+title: "R Notebook for predicting LPSA"
+output: html_notebook
+---
+# 1  Exploratory data analysis andKnearest neigh-bor regression
+
+```{r}
+prostate=read.table('prostate.data',header = TRUE)
+```
+## We make sure to visualize the summary of the data
+
+```{r}
+summary(prostate)
+```
+lcavol lweight ibph icp ipsa are quantitive continue (float)
+age gleason ipgg are quantitative discrete (integer)
+svi and train are booleans
+
+## display using scatter plots and boxplots
+
+```{r}
+plot(prostate, label="plot de toutes les datas")
+```
+```{r}
+plot(prostate$lcavol,prostate$lpsa)
+```
+Plots are good for visualize continus var
+```{r}
+plot(subset(prostate,select = c(lpsa,lweight,age,lcavol,lbph,lcp)))
+
+```
+```{r}
+plot(prostate[-10])
+```
+
+When vizualize quantitative vs qualitative a boxplot is adapted
+```{r}
+boxplot(lpsa~svi,data=prostate,xlab="svi",ylab="lpsa")
+boxplot(lpsa~gleason,data=prostate,xlab="svi",ylab="gleason")
+```
+##  predict lpsa 
+### we will use lpsafrom input variableslcavol,lweight,ageandlbph and knn algorithm
+
+
+```{r}
+library('FNN')
+```
+
+select the interesting rows
+```{r}
+data= prostate[,c('lcavol','lweight','age','lbph','lpsa','train')]
+```
+
+normalize
+```{r}
+x.train=scale(data[data$train==T,1:4])
+y.train=data[data$train==T,5]
+x.tst=scale(data[data$train==F,1:4])
+y.tst=data[data$train==F,5]
+```
+
+use of knn
+```{r}
+reg<-knn.reg(train=x.train, test = x.tst, y=y.app, k = 4)
+```
+
+model error:
+```{r}
+mean((y.tst-reg$pred)**2)
+```
+```{r}
+plot(y.tst,reg$pred,xlab='y',ylab='prediction')
+abline(0,1)#c'est la ligne si les prédictions etaient parfaites
+```
+## with the graphic we can choose the k so that the error is minimal
+
+```{r}
+MSE<-rep(0,15)
+for(k in 1:15){
+  reg<-knn.reg(train=x.train, test = x.tst, 
+               y=y.train, k = k)
+  MSE[k]<-mean((y.tst-reg$pred)^2)
+}
+plot(1:15,MSE,xlab='k',ylab='MSE')  
+```
+```{r}
+which.min(MSE)#find the min index in the list
+```
+
+# 2 Normal data generation and knearest neighbor regression
+
+## we generate test and train sets
+```{r}
+library(mvtnorm)
+```
+set parameters of the conditional densities P(Y|X) X~N(mu,sigma)
+```{r}
+mu1=c(0,0)
+mu2=c(0,2)
+mu3=c(2,0)
+```
+
+```{r}
+sigma1=matrix(c(1,0.5,0.5,2),2,2)
+sigma2=matrix(c(1,0.5,0.5,2),2,2)
+sigma3=matrix(c(1,0.5,0.5,2),2,2)
+```
+funtion that generate a dataset
+```{r}
+gen.data<- function(N,mu1,mu2,mu3,Sigma1,Sigma2,Sigma3,p1,p2){
+  y<-sample(3,N,prob=c(p1,p2,1-p1-p2),replace=TRUE)
+  X<-matrix(0,N,2)
+  N1<-length(which(y==1)) # number of objects from class 1
+  N2<-length(which(y==2))
+  N3<-length(which(y==3))
+  X[y==1,]<-rmvnorm(N1,mu1,Sigma1)
+  X[y==2,]<-rmvnorm(N2,mu2,Sigma2)
+  X[y==3,]<-rmvnorm(N3,mu3,Sigma3)
+  return(list(X=X,y=y))
+}
+```
+build one training and one test set
+
+```{r}
+train<-gen.data(N=100,mu1,mu2,mu3,sigma1,sigma2,sigma3,p1=0.3,p2=0.2)
+test<-gen.data(N=1000,mu1,mu2,mu3,sigma1,sigma2,sigma3,p1=0.3,p2=0.2)
+plot(train$X[,1],train$X[,2],col=train$y,pch=train$y)
+```
+## let's classify with knn k=5
+```{r}
+ypred<-knn(train$X,test$X,factor(train$y),k=5)
+```
+let's print adjacent matrix
+```{r}
+table(test$y,ypred)
+```
+mean error
+```{r}
+err<-mean(test$y != ypred)
+print(err)
+```
+Initializing matrix that are recording erreur for each [random generation set, k ] with 0s
+```{r}
+M<-10 #number of random generation of sets
+Kmax<-20 
+
+ERR100<-matrix(0,M,Kmax)
+ERR500<-ERR100
+```
+```{r}
+for(m in 1:M){
+  print(m)
+  train100<-gen.data(N=100,mu1,mu2,mu3,sigma1,sigma2,sigma3,p1=0.3,p2=0.2)
+  train500<-gen.data(N=500,mu1,mu2,mu3,sigma1,sigma2,sigma3,p1=0.3,p2=0.2)
+  for(k in 1:Kmax){
+    ypred<-knn(train100$X,test$X,factor(train100$y),k=k)
+    ERR100[m,k]<-mean(test$y != ypred)
+    ypred<-knn(train500$X,test$X,factor(train500$y),k=k)
+    ERR500[m,k]<-mean(test$y != ypred)
+  }
+}
+err100<-colMeans(ERR100)
+err500<-colMeans(ERR500)
+plot(1:Kmax,err100,type="b",ylim=range(err100,err500))
+lines(1:Kmax,err500,col="red")
+```
+
+We see that the error tends faster to zero with a bigger trainning set
