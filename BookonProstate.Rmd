@@ -1,5 +1,5 @@
 ---
-title: "R Notebook for predicting LPSA"
+title: "R Notebook for predicting LPSA on prostate"
 output: html_notebook
 ---
 # 1  Exploratory data analysis andKnearest neigh-bor regression
@@ -166,3 +166,50 @@ lines(1:Kmax,err500,col="red")
 ```
 
 We see that the error tends faster to zero with a bigger trainning set
+
+# Linear regression
+
+```{r}
+reg<- lm(lpsa ~. - train ,data=prostate)#do a linear fitting lpsa in function of all without taking into accont that this is a train data or not (which is random in fact)
+summary(reg)
+```
+The coefficients are significantly non-zero because they are correlated to the lpsa.
+```{r}
+reg<- lm(lpsa ~. -lcavol -train,data=prostate)
+summary(reg)
+```
+```{r}
+reg<- lm(lpsa ~. -lcavol -lweight -train,data=prostate)
+summary(reg)
+
+```
+Explications des coefficients
+
+## Plot the predicted values versus real values of lpsa
+
+```{r}
+reg<- lm(lpsa ~. - train ,data=prostate)
+plot(prostate$lpsa,fitted(reg))
+abline(0,1)
+```
+
+## plot residuals versus the real value of lpsa
+```{r}
+plot(prostate$lpsa, resid(reg))
+abline(h=0) #because sum(resid)==0
+```
+This shows that 
+
+## Now use the train dataset to estimate the parameters
+```{r}
+reg<- lm(lpsa ~. - train ,
+         data=prostate[prostate$train==TRUE,])#fiiting
+
+pred<-predict(reg,newdata=prostate[prostate$train==FALSE,])#yhat
+ytest<-prostate$lpsa[prostate$train==FALSE]
+plot(ytest,pred)
+abline(0,1)
+
+mse<-mean((ytest-pred)^2)#mean square error 
+```
+
