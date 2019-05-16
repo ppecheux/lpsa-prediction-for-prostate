@@ -61,7 +61,7 @@ y.tst=data[data$train==F,5]
 
 use of knn
 ```{r}
-reg<-knn.reg(train=x.train, test = x.tst, y=y.app, k = 4)
+reg<-knn.reg(train=x.train, test = x.tst, y=y.train, k = 4)
 ```
 
 model error:
@@ -202,8 +202,7 @@ This shows that
 
 ## Now use the train dataset to estimate the parameters
 ```{r}
-reg<- lm(lpsa ~. - train ,
-         data=prostate[prostate$train==TRUE,])#fiiting
+reg<- lm(lpsa ~. - train , data=prostate[prostate$train==TRUE,])#fiiting
 
 pred<-predict(reg,newdata=prostate[prostate$train==FALSE,])#yhat
 ytest<-prostate$lpsa[prostate$train==FALSE]
@@ -211,5 +210,90 @@ plot(ytest,pred)
 abline(0,1)
 
 mse<-mean((ytest-pred)^2)#mean square error 
+```
+
+# LAB6 Generation of different regression model
+```{r}
+library(glmnet)
+```
+
+```{r}
+prostate=read.table('prostate.data',header = TRUE)
+train<-prostate$train
+prostate<-prostate[,-10]
+xtst<-as.matrix(prostate[prostate$train==FALSE,1:8])
+ntst<-nrow(xtst)
+X<-cbind(rep(1,ntst),xtst)
+ytst<-prostate$lpsa[train==FALSE]
+```
+## Linear regression with all predictors
+```{r}
+reg<- lm(lpsa ~.  ,data=prostate[train==TRUE,])
+summary(reg)
+
+pred<-predict(reg,newdata=prostate[train==FALSE,])
+mse_full<-mean((ytst-pred)^2)
+```
+
+## forward selection
+
+```{r}
+library(leaps)
+```
+```{r}
+reg.forward<-regsubsets(lpsa~.,data=prostate[train==TRUE,],
+                        method='forward',nvmax=30)
+plot(reg.forward,scale="bic")
+res<-summary(reg.forward)
+res
+```
+
+## BIC
+```{r}
+print(best<-which.min(res$bic))
+ypred<-X[,res$which[best,]]%*%coef(reg.forward,best)
+mse_forward_bic<-mean((ypred-y.tst)^2)
+# Adjusted R2
+plot(reg.forward,scale="adjr2")
+best<-which.max(res$adjr2)
+ypred<-X[,res$which[best,]]%*%coef(reg.forward,best)
+mse_forward_adjr2<-mean((ypred-ytst)^2)
+```
+## Backward selection
+```{r}
+reg.backward<-regsubsets(lpsa~.,data=prostate[train==TRUE,],method='backward',nvmax=30)
+plot(reg.backward,scale="bic")
+res<-summary(reg.backward)
+# The results are the same as those of forward selection
+```
+## Optimal subset
+```{r}
+reg.exhaustive<-regsubsets(lpsa~.,data=prostate[train==TRUE,],method='exhaustive',nvmax=30)
+plot(reg.exhaustive,scale="bic")
+res<-summary(reg.exhaustive)
+# Again the results are the same
+```
+## Ridge
+```{r}
+xapp<-as.matrix(prostate[train==TRUE,1:8])
+yapp<-prostate$lpsa[train==TRUE]
+
+cv.out<-cv.glmnet(xapp,yapp,alpha=0,standardize=TRUE)
+plot(cv.out)
+
+fit<-glmnet(xapp,yapp,lambda=cv.out$lambda.min,alpha=0,standardize=TRUE)
+ridge.pred<-predict(fit,s=cv.out$lambda.min,newx=xtst)
+mse_ridge<-mean((ytst-ridge.pred)^2)
+```
+## Lasso
+```{r}
+cv.out<-cv.glmnet(xapp,yapp,alpha=1,standardize=TRUE)
+plot(cv.out)
+
+fit<-glmnet(xapp,yapp,lambda=cv.out$lambda.min,alpha=1,standardize=TRUE)
+lasso.pred<-predict(fit,s=cv.out$lambda.min,newx=xtst)
+mse_lasso<-mean((ytst-lasso.pred)^2)
+
+print(c(mse_full,mse_forward_bic,mse_forward_adjr2, mse_ridge,mse_lasso))
 ```
 
